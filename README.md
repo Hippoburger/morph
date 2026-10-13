@@ -23,12 +23,22 @@ PDFKit). Two optional tools unlock the rest, and Morph tells you when a conversi
 When there's no direct route, Morph chains up to three steps through PNG, PDF, WAV or HTML, so
 DOCX → PNG goes DOCX → PDF → PNG and a PDF becomes one image per page.
 
+## Install
+
+Download the DMG from [Releases](https://github.com/Hippoburger/morph/releases/latest), open it and
+drag Morph into Applications. It isn't notarized yet, so the first launch needs **System Settings →
+Privacy & Security → Open Anyway**. Then open Morph and press **Turn On…** for the Finder menu.
+
 ## Build
 
 Needs Xcode (for the macOS SDK and swiftc), nothing else.
 
     ./build.sh            # build/Morph.app
     ./build.sh install    # also copies it to /Applications and turns on the Finder extension
+    ./build.sh dmg        # also packs build/Morph-<version>.dmg
+
+Releases build themselves: bump `VERSION`, commit, and push a matching tag (`git tag v0.2.0 && git push
+origin v0.2.0`). The workflow in `.github/workflows/release.yml` builds the DMG and publishes it.
 
 It's signed ad hoc, which runs on the Mac that built it. Set `SIGN_IDENTITY` to a Developer ID
 identity to sign it for other Macs (they'd also want it notarized).
@@ -54,3 +64,7 @@ The app binary doubles as a CLI:
 The Finder extension is sandboxed, so it converts nothing itself. It opens
 `morph://convert?to=png&file=…` and the app, which isn't sandboxed, does the work with a spinner in
 the menu bar, posts a notification and quits when it's idle.
+
+## License
+
+MIT, see [LICENSE](LICENSE).

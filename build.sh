@@ -3,6 +3,7 @@
 #
 #   ./build.sh            build
 #   ./build.sh install    build, copy to /Applications, register and enable the Finder extension
+#   ./build.sh dmg        build, then pack build/Morph-<version>.dmg with an Applications shortcut
 #
 # Signs with $SIGN_IDENTITY when it's set (an "Apple Development" or "Developer ID Application"
 # identity), ad hoc otherwise, which runs on this Mac only.
@@ -50,4 +51,16 @@ if [ "${1:-}" = install ]; then
   pluginkit -a "$DEST/Contents/PlugIns/MorphFinder.appex"
   pluginkit -e use -i com.biye.Morph.Finder
   echo "installed $DEST"
+fi
+
+if [ "${1:-}" = dmg ]; then
+  DMG="$ROOT/build/Morph-$VERSION.dmg"
+  STAGE="$ROOT/build/dmg"
+  rm -rf "$ROOT/build/dmg" "$DMG"
+  mkdir -p "$STAGE"
+  cp -R "$APP" "$STAGE/"
+  ln -s /Applications "$STAGE/Applications"
+  hdiutil create -volname "Morph $VERSION" -srcfolder "$STAGE" -fs HFS+ -format UDZO -ov "$DMG" >/dev/null
+  rm -rf "$ROOT/build/dmg"
+  echo "packed $DMG"
 fi
