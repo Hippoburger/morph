@@ -4,15 +4,29 @@ import Foundation
 // can become, and whether that needs a tool macOS doesn't ship.
 
 enum Tool: String, CaseIterable {
-    case ffmpeg, libreoffice
+    case ffmpeg, webp, libreoffice
 
-    var displayName: String { self == .ffmpeg ? "ffmpeg" : "LibreOffice" }
-    var installCommand: String { self == .ffmpeg ? "brew install ffmpeg" : "brew install --cask libreoffice" }
+    var displayName: String {
+        switch self {
+        case .ffmpeg: return "ffmpeg"
+        case .webp: return "WebP tools"
+        case .libreoffice: return "LibreOffice"
+        }
+    }
+
+    var installCommand: String {
+        switch self {
+        case .ffmpeg: return "brew install ffmpeg"
+        case .webp: return "brew install webp"
+        case .libreoffice: return "brew install --cask libreoffice"
+        }
+    }
 
     var path: String? {
         let candidates: [String]
         switch self {
         case .ffmpeg: candidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
+        case .webp: candidates = ["/opt/homebrew/bin/cwebp", "/usr/local/bin/cwebp"]
         case .libreoffice: candidates = ["/Applications/LibreOffice.app/Contents/MacOS/soffice"]
         }
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
@@ -81,7 +95,7 @@ enum Formats {
         guard s != d, let sk = kind(of: s), let dk = kind(of: d) else { return nil }
         let videoNative = nativeVideo.contains(s)
         switch (sk, dk) {
-        case (.image, .image): return d == "webp" ? .tool(.ffmpeg) : .native
+        case (.image, .image): return d == "webp" ? .tool(.webp) : .native
         case (.image, .pdf): return .native
         case (.pdf, .image): return ["png", "jpg", "heic", "tiff"].contains(d) ? .native : nil
         case (.video, .video):

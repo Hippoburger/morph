@@ -3,7 +3,8 @@ import ImageIO
 import UniformTypeIdentifiers
 
 // Images through ImageIO, which reads all of them but QOI and SVG and writes all of them but WEBP,
-// QOI, PPM and SVG. QOI and PPM are written here, SVG wraps a PNG, and WEBP goes through ffmpeg.
+// QOI, PPM and SVG. QOI and PPM are written here, SVG wraps a PNG, and WEBP goes
+// through cwebp, or ffmpeg when it was built with libwebp (Homebrew's isn't).
 
 enum ImageEngine {
     static func convert(_ input: URL, from src: String, to dst: String, out: URL) throws {
@@ -59,12 +60,18 @@ enum ImageEngine {
         case "svg":
             try writeSVG(image, to: url)
         case "webp":
-            guard let ffmpeg = Tool.ffmpeg.path else { throw MissingToolError(tool: .ffmpeg) }
             let png = OutputPath.temporary(ext: "png")
             defer { try? FileManager.default.removeItem(at: png) }
-            try write(image, to: png, ext: "png")
-            try Shell.run(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", png.path,
-                                   "-frames:v", "1", "-c:v", "libwebp", "-quality", "90", url.path])
+            if let cwebp = Tool.webp.path {
+                try write(image, to: png, ext: "png")
+                try Shell.run(cwebp, ["-quiet", "-q", "90", "-alpha_q", "100", "-metadata", "icc", png.path, "-o", url.path])
+            } else if let ffmpeg = Tool.ffmpeg.path, FFmpeg.has("libwebp") {
+                try write(image, to: png, ext: "png")
+                try Shell.run(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", png.path,
+                                       "-frames:v", "1", "-c:v", "libwebp", "-quality", "90", url.path])
+            } else {
+                throw MissingToolError(tool: .webp)
+            }
         case "pdf":
             var box = CGRect(x: 0, y: 0, width: image.width, height: image.height)
             guard let ctx = CGContext(url as CFURL, mediaBox: &box, nil) else { throw ConversionError("Couldn't create the PDF.") }

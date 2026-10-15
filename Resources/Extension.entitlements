@@ -3,11 +3,12 @@
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.app-sandbox</key><true/>
-	<!-- Only to see whether ffmpeg and LibreOffice are installed, for the menu's "needs" hints. -->
+	<!-- Only to see whether ffmpeg, cwebp and LibreOffice are installed. Homebrew's bin/ holds
+	     symlinks into its Cellar/, so the whole prefix has to be readable, for the menu's "needs" hints. -->
 	<key>com.apple.security.temporary-exception.files.absolute-path.read-only</key>
 	<array>
-		<string>/opt/homebrew/bin/</string>
-		<string>/usr/local/bin/</string>
+		<string>/opt/homebrew/</string>
+		<string>/usr/local/</string>
 		<string>/Applications/LibreOffice.app/</string>
 	</array>
 </dict>

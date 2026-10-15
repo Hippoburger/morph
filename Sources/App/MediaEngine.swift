@@ -20,26 +20,42 @@ enum MediaEngine {
         }
         guard let ffmpeg = Tool.ffmpeg.path else { throw MissingToolError(tool: .ffmpeg) }
         let kind = Formats.kind(of: src)
-        try await Task.detached {
-            _ = try Shell.run(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", input.path] + ffmpegArgs(to: dst, fromVideo: kind == .video) + [out.path])
-        }.value
+        do {
+            try await Task.detached {
+                _ = try Shell.run(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", input.path] + ffmpegArgs(to: dst, fromVideo: kind == .video) + [out.path])
+            }.value
+        } catch let error as ConversionError where error.message.contains("does not contain any stream") {
+            throw ConversionError(kind == .video && Formats.kind(of: dst) == .audio ? "This video has no sound." : "There's nothing in this file ffmpeg can convert.")
+        }
     }
 
-    private static func ffmpegArgs(to dst: String, fromVideo: Bool) -> [String] {
+    /// Arguments for `dst`, using the best encoder this ffmpeg has. Builds differ: Homebrew's leaves
+    /// out libvorbis and libwebp, others leave out libx264.
+    private static func ffmpegArgs(to dst: String, fromVideo: Bool) throws -> [String] {
+        let h264 = FFmpeg.has("libx264")
+            ? ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p"]
+            : ["-c:v", "h264_videotoolbox", "-q:v", "65", "-pix_fmt", "yuv420p"]
+        let opus = FFmpeg.has("libopus") ? ["-c:a", "libopus", "-b:a", "160k"] : ["-c:a", "opus", "-strict", "-2", "-b:a", "160k"]
         switch dst {
-        case "mp4": return ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
-        case "mov": return ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"]
-        case "webm": return ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1", "-c:a", "libopus", "-b:a", "128k"]
-        case "mkv": return ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-c:a", "aac", "-b:a", "192k"]
-        case "avi": return ["-c:v", "mpeg4", "-q:v", "3", "-c:a", "libmp3lame", "-q:a", "2"]
+        case "mp4": return h264 + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
+        case "mov", "mkv": return h264 + ["-c:a", "aac", "-b:a", "192k"]
+        case "webm":
+            let video = FFmpeg.has("libvpx-vp9") ? ["-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0", "-row-mt", "1"]
+                : FFmpeg.has("libvpx") ? ["-c:v", "libvpx", "-crf", "10", "-b:v", "2M"]
+                : FFmpeg.has("libsvtav1") ? ["-c:v", "libsvtav1", "-crf", "35"] : nil
+            guard let video else { throw ConversionError("This ffmpeg can't encode WebM video (it has no VP9, VP8 or AV1 encoder).") }
+            return video + opus
+        case "avi": return ["-c:v", "mpeg4", "-q:v", "3"] + (FFmpeg.has("libmp3lame") ? ["-c:a", "libmp3lame", "-q:a", "2"] : ["-c:a", "mp2", "-b:a", "192k"])
         case "gif": return ["-vf", "fps=12,scale='min(480,iw)':-2:flags=lanczos,split[a][b];[a]palettegen[p];[b][p]paletteuse", "-loop", "0"]
-        case "mp3": return ["-vn", "-c:a", "libmp3lame", "-q:a", "2"]
+        case "mp3":
+            guard FFmpeg.has("libmp3lame") else { throw ConversionError("This ffmpeg can't encode MP3 (it was built without LAME).") }
+            return ["-vn", "-c:a", "libmp3lame", "-q:a", "2"]
         case "wav": return ["-vn", "-c:a", "pcm_s16le"]
         case "flac": return ["-vn", "-c:a", "flac"]
-        case "aac": return ["-vn", "-c:a", "aac", "-b:a", "256k"]
-        case "m4a": return ["-vn", "-c:a", "aac", "-b:a", "256k"]
-        case "ogg": return ["-vn", "-c:a", "libvorbis", "-q:a", "6"]
-        case "opus": return ["-vn", "-c:a", "libopus", "-b:a", "160k"]
+        case "aac", "m4a": return ["-vn", "-c:a", "aac", "-b:a", "256k"]
+        // Ogg holds Opus as well as Vorbis, and every player that reads one reads the other.
+        case "ogg": return ["-vn"] + (FFmpeg.has("libvorbis") ? ["-c:a", "libvorbis", "-q:a", "6"] : opus)
+        case "opus": return ["-vn"] + opus
         default: return []
         }
     }

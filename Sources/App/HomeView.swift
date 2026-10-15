@@ -64,7 +64,9 @@ struct HomeView: View {
         card {
             VStack(alignment: .leading, spacing: 12) {
                 Text("Optional tools").font(.headline)
-                toolRow(.ffmpeg, adds: "MP3, OGG, Opus, WebM, MKV, AVI and WebP, and video from any format")
+                toolRow(.ffmpeg, adds: "MP3, OGG, Opus, WebM, MKV and AVI, and video from any format")
+                Divider()
+                toolRow(.webp, adds: "WebP")
                 Divider()
                 toolRow(.libreoffice, adds: "PowerPoint, Excel and OpenDocument slides and sheets, and sharper Word to PDF")
             }

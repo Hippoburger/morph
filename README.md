@@ -13,10 +13,11 @@ the original and never leaves your Mac.
 | Documents | PDF DOCX DOC ODT RTF TXT HTML PPTX PPT ODP XLSX XLS ODS CSV |
 
 Most of it runs on what macOS already has (ImageIO, AVFoundation, Core Audio, AppKit's text system,
-PDFKit). Two optional tools unlock the rest, and Morph tells you when a conversion needs one:
+PDFKit). Three optional tools unlock the rest, and Morph tells you when a conversion needs one:
 
-- **ffmpeg** (`brew install ffmpeg`): MP3, OGG, Opus, WebM, MKV, AVI and WebP output, and video from
-  WebM, MKV and AVI.
+- **ffmpeg** (`brew install ffmpeg`): MP3, OGG, Opus, WebM, MKV and AVI output, and video from
+  WebM, MKV and AVI. Morph uses whichever encoders your build has.
+- **WebP tools** (`brew install webp`): WebP output.
 - **LibreOffice** (`brew install --cask libreoffice`): PowerPoint, Excel and OpenDocument slides and
   sheets, and better-looking Word to PDF.
 

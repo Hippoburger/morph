@@ -34,6 +34,21 @@ enum Shell {
     }
 }
 
+enum FFmpeg {
+    /// The encoders the installed ffmpeg was built with, read once.
+    static let encoders: Set<String> = {
+        guard let path = Tool.ffmpeg.path, let out = try? Shell.run(path, ["-hide_banner", "-encoders"]) else { return [] }
+        // Lines look like " V....D libx264    libx264 H.264 / AVC ..."
+        return Set(out.split(separator: "\n").compactMap { line in
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            guard parts.count >= 2, parts[0].count == 6, parts[0] != "------" else { return nil }
+            return String(parts[1])
+        })
+    }()
+
+    static func has(_ encoder: String) -> Bool { encoders.contains(encoder) }
+}
+
 enum OutputPath {
     /// `dir/base.ext`, or `dir/base 2.ext` and up when that's taken.
     static func unique(in dir: URL, base: String, ext: String) -> URL {
