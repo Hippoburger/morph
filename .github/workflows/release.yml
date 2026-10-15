@@ -1,0 +1,26 @@
+# Pushing a tag like v0.2.0 builds Morph-0.2.0.dmg and publishes it as that tag's GitHub release.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the DMG
+        run: |
+          echo "${GITHUB_REF_NAME#v}" > VERSION
+          ./build.sh dmg
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" build/Morph-*.dmg \
+            --title "Morph ${GITHUB_REF_NAME#v}" \
+            --notes-file .github/release-notes.md
