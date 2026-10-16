@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.2.1
+
+### Fixed
+
+- **PDF to Word now looks like the PDF.** Converting a PDF to DOCX, ODT, RTF, HTML or DOC used to put
+  every line in its own paragraph, in Helvetica, so the text re-wrapped mid-sentence and lost its
+  spacing. Morph now joins wrapped lines back into paragraphs, keeps the spacing between them, and
+  uses the font the PDF really uses (Calibri, Times, Arial…) with its bold and italic.
+- **Signatures, rules and logos come along.** Anything drawn between the lines of a PDF goes into the
+  document as a picture in the same place.
+- **No more stray OCR text.** Hidden text that iOS adds over a signature or handwriting (which read
+  as "Bir Gur" for a signature) is left out.
+- **Links work.** Web addresses and emails in the PDF become clickable links.
+- PDF to TXT joins wrapped lines into paragraphs the same way.
+
 ## 0.2.0
 
 ### New

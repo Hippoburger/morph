@@ -19,18 +19,20 @@ enum DocumentEngine {
         case (.text, .pdf):
             try renderPDF(read(input, ext: src), to: out)
         case (.pdf, .text):
-            if dst != "txt", let pages = try pagesIfDrawn(input) {
-                if dst == "doc", Tool.libreoffice.path != nil {
-                    // Word 97's binary format can't be written here, but LibreOffice turns a DOCX into one.
-                    let docx = OutputPath.temporary(ext: "docx")
-                    defer { try? FileManager.default.removeItem(at: docx) }
-                    try PageDocument.write(pages, to: docx, ext: "docx")
-                    try await libreoffice(docx, to: "doc", out: out)
-                } else {
-                    try PageDocument.write(pages, to: out, ext: dst)
-                }
+            guard let doc = PDFDocument(url: input) else { throw ConversionError("Couldn't open the PDF.") }
+            if doc.isLocked { throw ConversionError("The PDF is password protected.") }
+            if dst == "txt" {
+                let text = PDFLayout.text(doc)
+                guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw ConversionError("The PDF has no text in it.") }
+                try text.write(to: out, atomically: true, encoding: .utf8)
+            } else if dst == "doc", Tool.libreoffice.path != nil {
+                // Word 97's binary format can't be written here, but LibreOffice turns a DOCX into one.
+                let docx = OutputPath.temporary(ext: "docx")
+                defer { try? FileManager.default.removeItem(at: docx) }
+                try PageDocument.write(PDFLayout.pages(doc), to: docx, ext: "docx")
+                try await libreoffice(docx, to: "doc", out: out)
             } else {
-                try write(readPDF(input), to: out, ext: dst)
+                try PageDocument.write(PDFLayout.pages(doc), to: out, ext: dst)
             }
         case (.pdf, .image):
             return try await pdfToImages(input, ext: dst, first: out)
@@ -106,35 +108,6 @@ enum DocumentEngine {
         op.showsPrintPanel = false
         op.showsProgressPanel = false
         guard op.run() else { throw ConversionError("Couldn't write the PDF.") }
-    }
-
-    private static func readPDF(_ url: URL) throws -> NSAttributedString {
-        guard let doc = PDFDocument(url: url) else { throw ConversionError("Couldn't open the PDF.") }
-        if doc.isLocked { throw ConversionError("The PDF is password protected.") }
-        let text = NSMutableAttributedString()
-        for i in 0..<doc.pageCount {
-            guard let page = doc.page(at: i)?.attributedString else { continue }
-            if text.length > 0 { text.append(NSAttributedString(string: "\n\n")) }
-            text.append(page)
-        }
-        guard text.length > 0 else { throw ConversionError("The PDF has no text in it (it may be scanned).") }
-        return text
-    }
-
-    /// The PDF page by page when any of its pages is handwriting or a scan, nil when it's all text.
-    /// Drawn pages become pictures; text pages keep their text, as plain paragraphs.
-    private static func pagesIfDrawn(_ url: URL) throws -> [PageDocument.Page]? {
-        guard let doc = PDFDocument(url: url) else { throw ConversionError("Couldn't open the PDF.") }
-        if doc.isLocked { throw ConversionError("The PDF is password protected.") }
-        let pages = (0..<doc.pageCount).compactMap { doc.page(at: $0) }
-        let drawn = pages.map(PDFPages.isPicture)
-        guard drawn.contains(true) else { return nil }
-        return try zip(pages, drawn).map { page, isPicture in
-            guard isPicture else { return .text(page.string ?? "") }
-            let bounds = page.bounds(for: .mediaBox)
-            let points = page.rotation % 180 == 0 ? bounds.size : CGSize(width: bounds.height, height: bounds.width)
-            return try PageDocument.picture(PDFPages.render(page), points: points)
-        }
     }
 
     /// One image per page at 144 dpi: `name.png` for a single page, `name page 1.png` and on for more.
