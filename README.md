@@ -38,7 +38,8 @@ Needs Xcode (for the macOS SDK and swiftc), nothing else.
     ./build.sh install    # also copies it to /Applications and turns on the Finder extension
     ./build.sh dmg        # also packs build/Morph-<version>.dmg
 
-Releases build themselves: bump `VERSION`, commit, and push a matching tag (`git tag v0.2.0 && git push
+Releases build themselves: bump `VERSION`, add the version to `CHANGELOG.md` and its notes to
+`.github/release-notes.md` (the release's description), commit, and push a matching tag (`git tag v0.2.0 && git push
 origin v0.2.0`). The workflow in `.github/workflows/release.yml` builds the DMG and publishes it.
 
 It's signed ad hoc, which runs on the Mac that built it. Set `SIGN_IDENTITY` to a Developer ID
