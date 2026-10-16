@@ -19,7 +19,11 @@ enum DocumentEngine {
         case (.text, .pdf):
             try renderPDF(read(input, ext: src), to: out)
         case (.pdf, .text):
-            try write(readPDF(input), to: out, ext: dst)
+            if dst != "txt", let pages = try pagesIfDrawn(input) {
+                try PageDocument.write(pages, to: out, ext: dst)
+            } else {
+                try write(readPDF(input), to: out, ext: dst)
+            }
         case (.pdf, .image):
             return try await pdfToImages(input, ext: dst, first: out)
         case (.csv, .text):
@@ -109,6 +113,22 @@ enum DocumentEngine {
         return text
     }
 
+    /// The PDF page by page when any of its pages is handwriting or a scan, nil when it's all text.
+    /// Drawn pages become pictures; text pages keep their text, as plain paragraphs.
+    private static func pagesIfDrawn(_ url: URL) throws -> [PageDocument.Page]? {
+        guard let doc = PDFDocument(url: url) else { throw ConversionError("Couldn't open the PDF.") }
+        if doc.isLocked { throw ConversionError("The PDF is password protected.") }
+        let pages = (0..<doc.pageCount).compactMap { doc.page(at: $0) }
+        let drawn = pages.map(PDFPages.isPicture)
+        guard drawn.contains(true) else { return nil }
+        return try zip(pages, drawn).map { page, isPicture in
+            guard isPicture else { return .text(page.string ?? "") }
+            let bounds = page.bounds(for: .mediaBox)
+            let points = page.rotation % 180 == 0 ? bounds.size : CGSize(width: bounds.height, height: bounds.width)
+            return try PageDocument.picture(PDFPages.render(page), points: points)
+        }
+    }
+
     /// One image per page at 144 dpi: `name.png` for a single page, `name page 1.png` and on for more.
     private static func pdfToImages(_ url: URL, ext: String, first: URL) async throws -> [URL] {
         guard let doc = PDFDocument(url: url), doc.pageCount > 0 else { throw ConversionError("Couldn't open the PDF.") }
@@ -118,14 +138,7 @@ enum DocumentEngine {
         var outputs: [URL] = []
         for i in 0..<doc.pageCount {
             guard let page = doc.page(at: i) else { continue }
-            let bounds = page.bounds(for: .mediaBox)
-            let rotated = page.rotation % 180 != 0
-            let scale = 2.0
-            let w = Int((rotated ? bounds.height : bounds.width) * scale), h = Int((rotated ? bounds.width : bounds.height) * scale)
-            let image = try ImageEngine.render(width: w, height: h, opaque: true) { ctx, _ in
-                ctx.scaleBy(x: scale, y: scale)
-                page.draw(with: .mediaBox, to: ctx)
-            }
+            let image = try PDFPages.render(page)
             let out = doc.pageCount == 1 ? first : OutputPath.unique(in: dir, base: "\(base) page \(i + 1)", ext: ext)
             try await Task.detached { try ImageEngine.write(image, to: out, ext: ext) }.value
             outputs.append(out)

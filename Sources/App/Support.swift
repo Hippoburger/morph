@@ -14,10 +14,11 @@ struct MissingToolError: LocalizedError {
 enum Shell {
     /// Runs a tool to completion and returns its output; throws with the last lines of it on failure.
     @discardableResult
-    static func run(_ path: String, _ args: [String]) throws -> String {
+    static func run(_ path: String, _ args: [String], in directory: URL? = nil) throws -> String {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: path)
         p.arguments = args
+        p.currentDirectoryURL = directory
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = pipe
