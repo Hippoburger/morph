@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.1.3
+
+### Fixed
+
+- **FLAC files made from MP3 audio now play in QuickTime and Music.** Converting an MP3, or a video
+  with MP3 audio, to FLAC through ffmpeg wrote a tiny 47-sample block that Apple's decoder rejects,
+  so the file failed with "An unknown error occurred (1718449215)". Morph now asks for standard
+  4608-sample blocks.
+
+### Checked
+
+These bugs, found in a similar converter, were checked against Morph and don't affect it:
+
+- Photos keep the rotation and mirroring Preview shows (JPEG EXIF orientation, HEIC rotation and
+  mirroring). The orientation is applied to the pixels, so converting the result again can't flip it.
+- Converting a silent video to audio says "This video has no sound", whether it goes through
+  AVFoundation or ffmpeg.
+- BMP files always open in Preview and Finder. Transparent areas are filled with white, because many
+  apps show transparent BMP pixels as black.
+
 ## 0.1.2
 
 ### Fixed

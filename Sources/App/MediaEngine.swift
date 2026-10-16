@@ -51,7 +51,9 @@ enum MediaEngine {
             guard FFmpeg.has("libmp3lame") else { throw ConversionError("This ffmpeg can't encode MP3 (it was built without LAME).") }
             return ["-vn", "-c:a", "libmp3lame", "-q:a", "2"]
         case "wav": return ["-vn", "-c:a", "pcm_s16le"]
-        case "flac": return ["-vn", "-c:a", "flac"]
+        // Left to itself, ffmpeg's FLAC encoder fed MP3 audio writes a 47-sample block that Core Audio
+        // can't decode, so QuickTime and Music fail with 'fmt?' (1718449215). A fixed block size fixes it.
+        case "flac": return ["-vn", "-c:a", "flac", "-frame_size", "4608"]
         case "aac", "m4a": return ["-vn", "-c:a", "aac", "-b:a", "256k"]
         // Ogg holds Opus as well as Vorbis, and every player that reads one reads the other.
         case "ogg": return ["-vn"] + (FFmpeg.has("libvorbis") ? ["-c:a", "libvorbis", "-q:a", "6"] : opus)
