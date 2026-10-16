@@ -5,7 +5,8 @@ import Foundation
 
 @MainActor
 enum Converter {
-    static func convert(_ input: URL, to dst: String) async throws -> [URL] {
+    /// `maxPixels` resizes images to fit that many pixels on their longest side.
+    static func convert(_ input: URL, to dst: String, maxPixels: Int? = nil) async throws -> [URL] {
         let src = Formats.normalize(input.pathExtension)
         guard let plan = Formats.plan(from: src, to: dst) else {
             throw ConversionError("Morph can't turn \(src.isEmpty ? "this file" : src.uppercased()) into \(dst.uppercased()).")
@@ -23,7 +24,7 @@ enum Converter {
                 let out = last ? OutputPath.unique(in: dir, base: item.base, ext: ext) : OutputPath.temporary(ext: ext)
                 let produced: [URL]
                 do {
-                    produced = try await step(item.url, from: from, to: ext, out: out)
+                    produced = try await step(item.url, from: from, to: ext, out: out, maxPixels: maxPixels)
                 } catch {
                     try? FileManager.default.removeItem(at: out)
                     throw error
@@ -41,10 +42,10 @@ enum Converter {
         return current.map(\.url)
     }
 
-    private static func step(_ input: URL, from s: String, to d: String, out: URL) async throws -> [URL] {
+    private static func step(_ input: URL, from s: String, to d: String, out: URL, maxPixels: Int?) async throws -> [URL] {
         switch Formats.kind(of: s) {
         case .image:
-            try await Task.detached { try ImageEngine.convert(input, from: s, to: d, out: out) }.value
+            try await Task.detached { try ImageEngine.convert(input, from: s, to: d, out: out, maxPixels: maxPixels) }.value
             return [out]
         case .video, .audio:
             try await MediaEngine.convert(input, from: s, to: d, out: out)

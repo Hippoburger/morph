@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0
+
+### New
+
+- **Resize while converting.** Image formats in the Finder menu now open a submenu: Full Size,
+  Large (2048 px), Medium (1280 px) or Small (640 px). From the command line: `--size 1280`.
+- **Make Smaller.** A new item in Finder's right-click menu for JPG, HEIC, AVIF, PNG, PDF, MP4 and
+  MOV. Photos are re-encoded and capped at 2560 px, videos become HEVC at up to 1080p, and PDFs go
+  through macOS's Reduce File Size filter. The result is saved as "name (smaller)" and only kept if
+  it's at least 5% smaller. From the command line: `--smaller`.
+- **Progress and Cancel.** Click the spinner in the menu bar to see how many files are done, or to
+  cancel the rest. Partly written files are removed.
+- **Faster batches.** Morph now converts three files at a time.
+- **Faster video.** On Apple silicon, video converted through ffmpeg now uses the Mac's hardware
+  encoder instead of the CPU, which is several times faster.
+
+### Fixed
+
+- **Photos keep their metadata.** Converted photos used to lose the date taken, camera and location.
+  They now keep them. Turn on **Remove location from photos** in the Morph window to leave out where
+  they were taken.
+
 ## 0.1.3
 
 ### Fixed

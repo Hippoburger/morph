@@ -7,12 +7,21 @@ import SwiftUI
 struct HomeView: View {
     @State private var extensionEnabled = FIFinderSyncController.isExtensionEnabled
     @State private var installed = Set(Tool.allCases.filter { $0.path != nil })
+    @AppStorage("stripLocation") private var stripLocation = false
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 finderCard
+                card {
+                    Toggle(isOn: $stripLocation) {
+                        Text("Remove location from photos").font(.headline)
+                        Text("Converted photos keep their date, camera and other details. Turn this on to leave out where they were taken.")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                    .toggleStyle(.switch)
+                }
                 toolsCard
                 formats
             }

@@ -21,6 +21,11 @@ PDFKit). Three optional tools unlock the rest, and Morph tells you when a conver
 - **LibreOffice** (`brew install --cask libreoffice`): PowerPoint, Excel and OpenDocument slides and
   sheets, and better-looking Word to PDF.
 
+Image formats open a submenu to resize as you convert (Full Size, 2048, 1280 or 640 px), and photos
+keep their date, camera and location (the Morph window has a switch to leave the location out).
+**Make Smaller** shrinks photos, videos and PDFs without changing their format. Morph converts
+three files at a time; click the spinner in the menu bar to see progress or cancel.
+
 When there's no direct route, Morph chains up to three steps through PNG, PDF, WAV or HTML, so
 DOCX → PNG goes DOCX → PDF → PNG and a PDF becomes one image per page.
 
@@ -55,6 +60,8 @@ The app binary doubles as a CLI:
     ln -s /Applications/Morph.app/Contents/MacOS/Morph ~/.local/bin/morph
     morph clip.mov --to mp4
     morph *.heic --to jpg
+    morph *.heic --to jpg --size 1280
+    morph clip.mov --smaller
     morph report.pdf --targets
 
 ## How it fits together

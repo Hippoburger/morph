@@ -12,6 +12,14 @@ struct MissingToolError: LocalizedError {
 }
 
 enum Shell {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var running: Set<Process> = []
+
+    /// Stops every tool Morph started, for Cancel. Their `run` calls then throw.
+    static func terminateAll() {
+        lock.withLock { running.forEach { $0.terminate() } }
+    }
+
     /// Runs a tool to completion and returns its output; throws with the last lines of it on failure.
     @discardableResult
     static func run(_ path: String, _ args: [String], in directory: URL? = nil) throws -> String {
@@ -24,6 +32,8 @@ enum Shell {
         p.standardError = pipe
         p.standardInput = FileHandle.nullDevice
         try p.run()
+        lock.withLock { _ = running.insert(p) }
+        defer { lock.withLock { _ = running.remove(p) } }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         p.waitUntilExit()
         let output = String(decoding: data, as: UTF8.self)
@@ -51,14 +61,18 @@ enum FFmpeg {
 }
 
 enum OutputPath {
+    /// Names handed out this session. Jobs run side by side, and one may not have written its file yet.
+    @MainActor private static var reserved: Set<String> = []
+
     /// `dir/base.ext`, or `dir/base 2.ext` and up when that's taken.
-    static func unique(in dir: URL, base: String, ext: String) -> URL {
+    @MainActor static func unique(in dir: URL, base: String, ext: String) -> URL {
         var url = dir.appendingPathComponent(base).appendingPathExtension(ext)
         var n = 2
-        while FileManager.default.fileExists(atPath: url.path) {
+        while FileManager.default.fileExists(atPath: url.path) || reserved.contains(url.path) {
             url = dir.appendingPathComponent("\(base) \(n)").appendingPathExtension(ext)
             n += 1
         }
+        reserved.insert(url.path)
         return url
     }
 

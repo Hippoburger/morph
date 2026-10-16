@@ -7,30 +7,33 @@ import UniformTypeIdentifiers
 // through cwebp, or ffmpeg when it was built with libwebp (Homebrew's isn't).
 
 enum ImageEngine {
-    static func convert(_ input: URL, from src: String, to dst: String, out: URL) throws {
-        let image = try load(input, ext: src)
-        try write(image, to: out, ext: dst)
+    /// `maxPixels` shrinks the image to fit that many pixels on its longest side; smaller ones stay as they are.
+    static func convert(_ input: URL, from src: String, to dst: String, out: URL, maxPixels: Int? = nil, quality: Double = 0.9) throws {
+        var (image, props) = try load(input, ext: src)
+        if let maxPixels, max(image.width, image.height) > maxPixels { image = try scaled(image, toFit: maxPixels) }
+        try write(image, to: out, ext: dst, properties: metadata(props), quality: quality)
     }
 
     // MARK: Reading
 
-    static func load(_ url: URL, ext: String) throws -> CGImage {
+    /// The upright image and the file's metadata.
+    static func load(_ url: URL, ext: String) throws -> (CGImage, [CFString: Any]) {
         switch ext {
         case "qoi":
             let q = try QOI.decode(Data(contentsOf: url))
-            return try makeImage(width: q.width, height: q.height, straightRGBA: q.rgba)
+            return (try makeImage(width: q.width, height: q.height, straightRGBA: q.rgba), [:])
         case "svg":
             guard let svg = NSImage(contentsOf: url), svg.size.width > 0, svg.size.height > 0 else {
                 throw ConversionError("Couldn't read the SVG.")
             }
             // SVGs are drawn at their own size, but a small icon is scaled up so it stays sharp.
             let scale = max(1, 1024 / max(svg.size.width, svg.size.height))
-            return try render(width: Int(svg.size.width * scale), height: Int(svg.size.height * scale), opaque: false) { ctx, rect in
+            return (try render(width: Int(svg.size.width * scale), height: Int(svg.size.height * scale), opaque: false) { ctx, rect in
                 NSGraphicsContext.saveGraphicsState()
                 NSGraphicsContext.current = NSGraphicsContext(cgContext: ctx, flipped: false)
                 svg.draw(in: rect)
                 NSGraphicsContext.restoreGraphicsState()
-            }
+            }, [:])
         default:
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { throw ConversionError("Couldn't open the image.") }
             let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] ?? [:]
@@ -43,15 +46,38 @@ enum ImageEngine {
                 kCGImageSourceThumbnailMaxPixelSize: max(w, h, 1),
             ]
             if let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) ?? CGImageSourceCreateImageAtIndex(source, 0, nil) {
-                return image
+                return (image, props)
             }
             throw ConversionError("Couldn't decode the image.")
         }
     }
 
+    /// What of the source's metadata goes into the copy: date taken, camera, location (unless Remove
+    /// Location is on) and keywords. The orientation is reset because `load` already turned the
+    /// pixels upright, and the pixel sizes are left for ImageIO to fill in for the new image.
+    private static func metadata(_ props: [CFString: Any]) -> [CFString: Any] {
+        var out: [CFString: Any] = [:]
+        for key in [kCGImagePropertyExifDictionary, kCGImagePropertyExifAuxDictionary, kCGImagePropertyTIFFDictionary,
+                    kCGImagePropertyIPTCDictionary, kCGImagePropertyGPSDictionary, kCGImagePropertyDPIWidth, kCGImagePropertyDPIHeight] {
+            out[key] = props[key]
+        }
+        if UserDefaults.standard.bool(forKey: "stripLocation") { out[kCGImagePropertyGPSDictionary] = nil }
+        out[kCGImagePropertyOrientation] = 1
+        if var tiff = out[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+            tiff[kCGImagePropertyTIFFOrientation] = 1
+            out[kCGImagePropertyTIFFDictionary] = tiff
+        }
+        if var exif = out[kCGImagePropertyExifDictionary] as? [CFString: Any] {
+            exif[kCGImagePropertyExifPixelXDimension] = nil
+            exif[kCGImagePropertyExifPixelYDimension] = nil
+            out[kCGImagePropertyExifDictionary] = exif
+        }
+        return out
+    }
+
     // MARK: Writing
 
-    static func write(_ image: CGImage, to url: URL, ext: String) throws {
+    static func write(_ image: CGImage, to url: URL, ext: String, properties: [CFString: Any] = [:], quality: Double = 0.9) throws {
         switch ext {
         case "qoi":
             try QOI.encode(width: image.width, height: image.height, rgba: straightRGBA(image)).write(to: url)
@@ -89,7 +115,8 @@ enum ImageEngine {
             if ["jpg", "bmp"].contains(ext) { image = try flattened(image) }
             // ICO tops out at 256 pixels a side.
             if ext == "ico", max(image.width, image.height) > 256 { image = try scaled(image, toFit: 256) }
-            let props: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: 0.9]
+            var props = properties
+            props[kCGImageDestinationLossyCompressionQuality] = quality
             CGImageDestinationAddImage(dest, image, props as CFDictionary)
             guard CGImageDestinationFinalize(dest) else { throw ConversionError("Couldn't write the \(ext.uppercased()) file.") }
         }

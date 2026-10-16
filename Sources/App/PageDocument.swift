@@ -30,21 +30,9 @@ enum PageDocument {
         case "rtf": try Data(rtf(pages).utf8).write(to: url)
         case "html": try html(pages, title: url.deletingPathExtension().lastPathComponent).write(to: url, atomically: true, encoding: .utf8)
         case "doc":
-            // Word 97's binary format can't be written here. LibreOffice can turn the DOCX into one;
-            // without it the file is RTF, which Word, Pages and LibreOffice all open as a .doc.
-            if let soffice = Tool.libreoffice.path {
-                let docx = OutputPath.temporary(ext: "docx")
-                defer { try? FileManager.default.removeItem(at: docx) }
-                try self.docx(pages, to: docx)
-                let dir = docx.deletingLastPathComponent().appendingPathComponent("morph-\(UUID().uuidString)", isDirectory: true)
-                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                defer { try? FileManager.default.removeItem(at: dir) }
-                let profile = FileManager.default.temporaryDirectory.appendingPathComponent("morph-libreoffice-profile", isDirectory: true).absoluteString
-                try Shell.run(soffice, ["-env:UserInstallation=\(profile)", "--headless", "--convert-to", "doc", "--outdir", dir.path, docx.path])
-                try FileManager.default.moveItem(at: dir.appendingPathComponent(docx.deletingPathExtension().lastPathComponent + ".doc"), to: url)
-            } else {
-                try Data(rtf(pages).utf8).write(to: url)
-            }
+            // Without LibreOffice (see DocumentEngine) the file is RTF, which Word, Pages and
+            // LibreOffice all open as a .doc.
+            try Data(rtf(pages).utf8).write(to: url)
         default:
             throw ConversionError("Can't write \(ext.uppercased()) with pictures in it.")
         }

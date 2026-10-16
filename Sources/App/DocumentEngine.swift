@@ -20,7 +20,15 @@ enum DocumentEngine {
             try renderPDF(read(input, ext: src), to: out)
         case (.pdf, .text):
             if dst != "txt", let pages = try pagesIfDrawn(input) {
-                try PageDocument.write(pages, to: out, ext: dst)
+                if dst == "doc", Tool.libreoffice.path != nil {
+                    // Word 97's binary format can't be written here, but LibreOffice turns a DOCX into one.
+                    let docx = OutputPath.temporary(ext: "docx")
+                    defer { try? FileManager.default.removeItem(at: docx) }
+                    try PageDocument.write(pages, to: docx, ext: "docx")
+                    try await libreoffice(docx, to: "doc", out: out)
+                } else {
+                    try PageDocument.write(pages, to: out, ext: dst)
+                }
             } else {
                 try write(readPDF(input), to: out, ext: dst)
             }
@@ -194,8 +202,14 @@ enum DocumentEngine {
 
     // MARK: LibreOffice
 
+    private static var libreofficeBusy = false
+
     private static func libreoffice(_ input: URL, to dst: String, out: URL) async throws {
         guard let soffice = Tool.libreoffice.path else { throw MissingToolError(tool: .libreoffice) }
+        // One at a time: a second LibreOffice on the same profile hands its job to the first and exits.
+        while libreofficeBusy { try await Task.sleep(for: .milliseconds(100)) }
+        libreofficeBusy = true
+        defer { libreofficeBusy = false }
         let fm = FileManager.default
         let dir = fm.temporaryDirectory.appendingPathComponent("morph-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: dir, withIntermediateDirectories: true)

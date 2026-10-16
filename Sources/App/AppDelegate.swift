@@ -2,17 +2,26 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
-// The Finder extension is sandboxed, so it hands its jobs over as morph://convert?to=png&file=…
-// URLs. Morph runs them one after another with a spinner in the menu bar, posts a notification when
-// they're done, and quits once it's idle unless its window is open.
+// The Finder extension is sandboxed, so it hands its jobs over as morph://convert?to=png&size=1280&file=…
+// and morph://shrink?file=… URLs. Morph runs up to three at a time with a spinner in the menu bar
+// (whose menu shows progress and Cancel), posts a notification when they're done, and quits once it's
+// idle unless its window is open.
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUserNotificationCenterDelegate {
-    private var queue: [(file: URL, ext: String)] = []
-    private var running = false
+    /// `ext` nil means Make Smaller.
+    private struct Job { let file: URL; let ext: String?; let size: Int? }
+
+    private var queue: [Job] = []
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    private var finished = 0
+    private var cancelled = false
+    private var done: [URL] = []
+    private var failures: [(URL, Error)] = []
     private var openedByURL = false
     private var window: NSWindow?
     private var statusItem: NSStatusItem?
+    private var progressItem: NSMenuItem?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         UNUserNotificationCenter.current().delegate = self
@@ -39,34 +48,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     func application(_ application: NSApplication, open urls: [URL]) {
         for url in urls {
-            guard url.scheme == "morph", url.host == "convert",
-                  let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems,
-                  let ext = items.first(where: { $0.name == "to" })?.value else { continue }
+            guard url.scheme == "morph", url.host == "convert" || url.host == "shrink",
+                  let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems else { continue }
+            let ext = items.first { $0.name == "to" }?.value.map(Formats.normalize)
+            guard ext != nil || url.host == "shrink" else { continue }
+            let size = items.first { $0.name == "size" }?.value.flatMap { Int($0) }
             openedByURL = true
             for file in items where file.name == "file" {
-                if let path = file.value { queue.append((URL(fileURLWithPath: path), Formats.normalize(ext))) }
+                if let path = file.value { queue.append(Job(file: URL(fileURLWithPath: path), ext: ext, size: size)) }
             }
         }
-        if !running, !queue.isEmpty { Task { await drain() } }
+        pump()
     }
 
     // MARK: Jobs
 
-    private func drain() async {
-        running = true
-        showStatus()
-        var done: [URL] = [], failures: [(URL, Error)] = []
-        while !queue.isEmpty {
-            let job = queue.removeFirst()
-            statusItem?.button?.toolTip = "Converting \(job.file.lastPathComponent) to \(job.ext.uppercased())…"
-            do { done += try await Converter.convert(job.file, to: job.ext) } catch { failures.append((job.file, error)) }
+    /// Starts queued jobs until three are running. Each one calls back here when it ends.
+    private func pump() {
+        if !queue.isEmpty { showStatus() }
+        while tasks.count < 3, !queue.isEmpty {
+            let job = queue.removeFirst(), id = UUID()
+            tasks[id] = Task {
+                do {
+                    if let ext = job.ext {
+                        done += try await Converter.convert(job.file, to: ext, maxPixels: job.size)
+                    } else {
+                        done.append(try await Shrink.run(job.file))
+                    }
+                } catch where !cancelled {
+                    failures.append((job.file, error))
+                } catch {}
+                tasks[id] = nil
+                finished += 1
+                updateProgress()
+                pump()
+                if tasks.isEmpty, queue.isEmpty { await finish() }
+            }
         }
-        running = false
+        updateProgress()
+    }
+
+    private func finish() async {
         hideStatus()
+        let (done, failures) = (self.done, self.failures)
+        (self.done, self.failures, finished, cancelled) = ([], [], 0, false)
         if !failures.isEmpty { report(failures) }
         // The first time, this waits on the notification permission prompt.
         if !done.isEmpty { await notify(done) }
         quitIfIdle()
+    }
+
+    @objc private func cancelAll() {
+        cancelled = true
+        queue.removeAll()
+        tasks.values.forEach { $0.cancel() }
+        Shell.terminateAll()
     }
 
     private func notify(_ files: [URL]) async {
@@ -110,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     private func quitIfIdle() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [self] in
-            if !running, queue.isEmpty, window?.isVisible != true { NSApp.terminate(nil) }
+            if tasks.isEmpty, queue.isEmpty, window?.isVisible != true { NSApp.terminate(nil) }
         }
     }
 
@@ -129,12 +165,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
             NSLayoutConstraint.activate([spinner.centerXAnchor.constraint(equalTo: button.centerXAnchor),
                                          spinner.centerYAnchor.constraint(equalTo: button.centerYAnchor)])
         }
+        let menu = NSMenu()
+        let progress = NSMenuItem(title: "Converting…", action: nil, keyEquivalent: "")
+        progress.isEnabled = false
+        menu.addItem(progress)
+        menu.addItem(.separator())
+        let cancel = NSMenuItem(title: "Cancel", action: #selector(cancelAll), keyEquivalent: "")
+        cancel.target = self
+        menu.addItem(cancel)
+        item.menu = menu
         statusItem = item
+        progressItem = progress
+    }
+
+    private func updateProgress() {
+        let total = finished + tasks.count + queue.count
+        let text = cancelled ? "Cancelling…" : "Converting… \(finished) of \(total) done"
+        progressItem?.title = text
+        statusItem?.button?.toolTip = text
     }
 
     private func hideStatus() {
         if let statusItem { NSStatusBar.system.removeStatusItem(statusItem) }
         statusItem = nil
+        progressItem = nil
     }
 
     // MARK: Window
@@ -158,6 +212,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, UNUs
 
     func windowWillClose(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
-        if !running { NSApp.terminate(nil) }
+        if tasks.isEmpty, queue.isEmpty { NSApp.terminate(nil) }
     }
 }

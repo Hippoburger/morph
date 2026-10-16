@@ -62,6 +62,10 @@ enum Formats {
     private static let aliases = ["jpeg": "jpg", "jpe": "jpg", "tif": "tiff", "htm": "html", "m4v": "mp4", "oga": "ogg", "markdown": "txt", "md": "txt", "text": "txt"]
 
     static let nativeVideo: Set = ["mp4", "mov"]
+    /// What Make Smaller handles: lossy re-encodes for photos and video, ColorSync's filter for PDFs.
+    static let shrinkable: Set = ["jpg", "heic", "avif", "png", "pdf", "mp4", "mov"]
+    /// Longest side, in pixels, for the resize choices under an image format.
+    static let sizes = [("Large", 2048), ("Medium", 1280), ("Small", 640)]
     static let nativeAudioOut: Set = ["wav", "flac", "aac", "m4a"]
 
     static func normalize(_ ext: String) -> String {

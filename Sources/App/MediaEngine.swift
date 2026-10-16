@@ -22,7 +22,7 @@ enum MediaEngine {
         let kind = Formats.kind(of: src)
         do {
             try await Task.detached {
-                _ = try Shell.run(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", input.path] + ffmpegArgs(to: dst, fromVideo: kind == .video) + [out.path])
+                _ = try Shell.run(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-i", input.path] + ffmpegArgs(to: dst) + [out.path])
             }.value
         } catch let error as ConversionError where error.message.contains("does not contain any stream") {
             throw ConversionError(kind == .video && Formats.kind(of: dst) == .audio ? "This video has no sound." : "There's nothing in this file ffmpeg can convert.")
@@ -31,10 +31,17 @@ enum MediaEngine {
 
     /// Arguments for `dst`, using the best encoder this ffmpeg has. Builds differ: Homebrew's leaves
     /// out libvorbis and libwebp, others leave out libx264.
-    private static func ffmpegArgs(to dst: String, fromVideo: Bool) throws -> [String] {
-        let h264 = FFmpeg.has("libx264")
-            ? ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p"]
-            : ["-c:v", "h264_videotoolbox", "-q:v", "65", "-pix_fmt", "yuv420p"]
+    private static func ffmpegArgs(to dst: String) throws -> [String] {
+        // Apple silicon's media engine encodes H.264 several times faster than libx264, at little CPU.
+        // Its constant-quality mode (-q:v) only exists there, so Intel Macs keep libx264 when they have it.
+        #if arch(arm64)
+        let hardware = FFmpeg.has("h264_videotoolbox")
+        #else
+        let hardware = !FFmpeg.has("libx264")
+        #endif
+        let h264 = hardware
+            ? ["-c:v", "h264_videotoolbox", "-q:v", "65", "-pix_fmt", "yuv420p"]
+            : ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p"]
         let opus = FFmpeg.has("libopus") ? ["-c:a", "libopus", "-b:a", "160k"] : ["-c:a", "opus", "-strict", "-2", "-b:a", "160k"]
         switch dst {
         case "mp4": return h264 + ["-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart"]
@@ -85,7 +92,7 @@ enum MediaEngine {
         }
     }
 
-    private static func export(_ asset: AVURLAsset, to out: URL, type: AVFileType, presets: [String]) async throws {
+    static func export(_ asset: AVURLAsset, to out: URL, type: AVFileType, presets: [String]) async throws {
         var lastError: Error = ConversionError("Couldn't export the file.")
         for preset in presets {
             guard let session = AVAssetExportSession(asset: asset, presetName: preset) else { continue }
