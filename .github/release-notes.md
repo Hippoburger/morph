@@ -1,21 +1,21 @@
-## What's new in 0.2.0
+## What's new in 0.2.1
 
-- **Resize while converting.** Image formats in the right-click menu now have Full Size, Large
-  (2048 px), Medium (1280 px) and Small (640 px).
-- **Make Smaller.** Right-click a photo, video or PDF to shrink it without changing its format.
-  Videos become HEVC at up to 1080p, and photos are capped at 2560 px. The original is never
-  touched, and the result is only kept if it's at least 5% smaller.
-- **Photos keep their date, camera and location.** Converting used to drop them. Prefer not to share
-  where a photo was taken? Turn on **Remove location from photos** in the Morph window.
-- **Progress and Cancel.** Click the spinner in the menu bar.
-- **Faster.** Three files convert at once, and on Apple silicon video uses the hardware encoder.
-- Also includes 0.1.3's fix: FLAC files made from MP3 audio now play in QuickTime and Music.
+**PDF to Word now looks like the PDF.**
 
-See [CHANGELOG.md](https://github.com/Hippoburger/morph/blob/main/CHANGELOG.md) for details.
+Converting a PDF to Word (or ODT, RTF, HTML, DOC) used to put every line in its own paragraph, in
+Helvetica, so sentences broke in the middle and the spacing was lost. Now:
+
+- Wrapped lines are joined back into paragraphs, with the spacing between them kept.
+- Text keeps the font the PDF uses (Calibri, Times, Arial…), including bold and italic.
+- Signatures, rules and logos drawn on the page come along as pictures, in place.
+- Hidden text that iOS lays over a signature or handwriting is left out.
+- Web addresses and emails become clickable links.
+
+See [CHANGELOG.md](https://github.com/Hippoburger/morph/blob/main/CHANGELOG.md) for earlier versions.
 
 ## Install
 
-Download **Morph-0.2.0.dmg** below, open it and drag Morph into Applications.
+Download **Morph-0.2.1.dmg** below, open it and drag Morph into Applications.
 
 Morph isn't notarized yet, so the first time you open it macOS says it can't check it for malware.
 Click **Done**, then go to **System Settings → Privacy & Security**, scroll down and press
